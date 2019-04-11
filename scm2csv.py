@@ -78,7 +78,7 @@ def to_csv(file):
 		"\n".join(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Molecular_function'].get_values())),
 		"\n".join(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Biological_process'].get_values()))]], columns= col_go) for g in set(gene_go['Gene_ID'])], ignore_index=True)
 		go_df.to_csv(userid+"-Gene_GO_annotation.csv")
-		result.append(userid+"-Gene_GO_annotation.csv")
+		result.append({"displayName":"GO" ,"fileName":  userid+"-Gene_GO_annotation.csv"})
 
 	# Gene Pathway annotation
 	if gene_pathway != 0:
@@ -87,7 +87,7 @@ def to_csv(file):
 		"\n".join(filter(None, gene_go[gene_go['pathway'] == p]['small_mol'].get_values())), "\n".join(filter(None, gene_go[gene_go['pathway'] == p]['Gene_ID'].get_values()))]], 
 		columns= col_pw) for p in set(filter(None, gene_go['pathway']))], ignore_index=True)
 		pw_df.to_csv(userid+"-Gene_pathway_annotations.csv")
-		result.append(userid+"-Gene_pathway_annotations.csv")
+		result.append({"displayName":"PATHWAY" ,"fileName": userid+"-Gene_pathway_annotations.csv"})
 
 	# Biogrid annotation
 	if biogrid != 0:
@@ -95,7 +95,7 @@ def to_csv(file):
 		bg_df = pd.concat([pd.DataFrame([[find_name(lines[i+2]), node_name[find_name(lines[i+2])], node_defn[find_name(lines[i+2])], "Interacts_with", 
 		find_name(lines[i+3]), node_name[find_name(lines[i+3])], node_defn[find_name(lines[i+3])]]], columns= col_int) for i in interaction], ignore_index=True)
 		bg_df.to_csv(userid+"-biogrid_annotation.csv")
-		result.append(userid+"-biogrid_annotation.csv")
+		result.append({"displayName":"BIOGRID" ,"fileName": userid+"-biogrid_annotation.csv"})
 
 	return result
 
