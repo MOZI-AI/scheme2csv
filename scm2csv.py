@@ -3,7 +3,8 @@ import re
 import pandas as pd
 import uuid
 import os
-from config import CSV_FOLDER
+
+CSV_FOLDER = "/root/csv_result"
 
 
 def find_name(str):
