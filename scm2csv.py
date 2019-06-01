@@ -31,11 +31,11 @@ def to_csv(file):
 			member.append(num)
 		elif "EvaluationLink" in line:
 			evalun.append(num)
-		elif "gene_go_annotation" in line:
+		elif "gene-go-annotation" in line:
 			go_annotation = num
-		elif "gene_pathway_annotation" in line:
+		elif "gene-pathway-annotation" in line:
 			gene_pathway = num
-		elif "biogrid_interaction_annotation" in line:
+		elif "biogrid-interaction-annotation" in line:
 			biogrid = num
 
 	GO_ns = {}
