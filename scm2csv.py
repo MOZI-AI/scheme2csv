@@ -12,6 +12,11 @@ def find_name(str):
 	if len(name) > 0:
 		return re.findall('"([^"]*)"', str)[0]
 	return ""
+def checkPubmed(dic, str):
+	try:
+		return dic[str]
+	except KeyError:
+		return ""
 
 def to_csv(file):
 	member = []
@@ -100,7 +105,7 @@ def to_csv(file):
 	if biogrid != 0:
 		col_int = ["Interactor-1", "Interactor-1_Name", "Interactor-1_definition", "Interaction", "Interactor-2", "Interactor-2_Name", "Interactor-2_definition", "Pubmed ID"]
 		bg_df = pd.concat([pd.DataFrame([[find_name(lines[i+2]), node_name[find_name(lines[i+2])], node_defn[find_name(lines[i+2])], "Interacts_with", 
-		find_name(lines[i+3]), node_name[find_name(lines[i+3])], node_defn[find_name(lines[i+3])], pubmed[find_name(lines[i+2])+find_name(lines[i+3])]]], columns= col_int) for i in interaction], ignore_index=True)
+		find_name(lines[i+3]), node_name[find_name(lines[i+3])], node_defn[find_name(lines[i+3])], checkPubmed(pubmed, find_name(lines[i+2])+find_name(lines[i+3]))]], columns= col_int) for i in interaction], ignore_index=True)
 		bg_df.to_csv(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.csv"))
 		result.append({"displayName":"BIOGRID" ,"fileName": userid+"-biogrid_annotation.csv"})
 
