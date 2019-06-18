@@ -4,8 +4,7 @@ import pandas as pd
 import uuid
 import os
 
-# CSV_FOLDER = "/root/csv_result"
-CSV_FOLDER = "root/"
+CSV_FOLDER = "/root/csv_result"
 
 def find_name(str):
 	name = re.findall('"([^"]*)"', str)
@@ -19,18 +18,6 @@ def checkdic(dic, str):
 		return ""
 def uni(stri):
 	return ','.join(set(stri.split(','))).replace('Uniprot:', '').replace('pubmed:', '')
-
-# def find_genes(genes, prot, express):
-# 	result = []
-# 	for p in prot:
-# 		for k in express.keys():
-# 			if p in express[k]:
-# 				result.append(k+'[' + p + ']')
-# 	print(len(result))
-# 	if len(result) > 0:
-# 		return set(result)
-# 	else:
-# 		return set(genes)
 
 def find_codingGene(prot, dec):
 	for k in dec.keys():
@@ -142,7 +129,7 @@ def to_csv(file):
 	# Gene Pathway annotation
 	if gene_pathway != 0:
 		col_pw = ["Pathway", "Pathway_detail", "Gene[Uniprot]", "Proteins", "Small Molecules"]
-		pw_df = pd.concat([pd.DataFrame([[p, checkdic(node_name, p) + '[' + checkdic(node_defn, p) + ']',set(gene_go[gene_go['pathway'] == p]['Gene_ID'].get_values()), '\n'.join(set(filter(None, gene_go[gene_go['pathway'] == p]['proteins'].get_values()))), 
+		pw_df = pd.concat([pd.DataFrame([[p, checkdic(node_name, p) + '[' + checkdic(node_defn, p) + ']',",".join(set(gene_go[gene_go['pathway'] == p]['Gene_ID'].get_values())), ",".join(set(gene_go[gene_go['pathway'] == p]['proteins'].get_values())), 
 		"\n".join(set(filter(None, gene_go[gene_go['pathway'] == p]['small_mol'].get_values())))]], 
 		columns= col_pw) for p in set(filter(None, gene_go['pathway']))], ignore_index=True)
 		pw_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.csv"))
