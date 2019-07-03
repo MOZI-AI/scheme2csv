@@ -68,7 +68,9 @@ def to_csv(file):
 			interaction.append(i+1)
 		elif "expresses" in lines[i+1]:
 			if biogrid != 0:
-				if i+1 < biogrid:
+				if i+1 < biogrid and gene_pathway < biogrid:
+					express_pw.update({find_name(lines[i+3]): checkdic(express_pw, find_name(lines[i+3])) + find_name(lines[i+4]) + ','})
+				elif i+1 > biogrid and gene_pathway > biogrid:
 					express_pw.update({find_name(lines[i+3]): checkdic(express_pw, find_name(lines[i+3])) + find_name(lines[i+4]) + ','})
 				else:
 					expresses_bg.update({find_name(lines[i+3]): checkdic(expresses_bg, find_name(lines[i+3])) + find_name(lines[i+4]) + ','})
@@ -129,7 +131,7 @@ def to_csv(file):
 	# Gene Pathway annotation
 	if gene_pathway != 0:
 		col_pw = ["Pathway", "Pathway_detail", "Gene[Uniprot]", "Proteins", "Small Molecules"]
-		pw_df = pd.concat([pd.DataFrame([[p, checkdic(node_name, p) + '[' + checkdic(node_defn, p) + ']',",".join(set(gene_go[gene_go['pathway'] == p]['Gene_ID'].get_values())), ",".join(set(gene_go[gene_go['pathway'] == p]['proteins'].get_values())), 
+		pw_df = pd.concat([pd.DataFrame([[p, checkdic(node_name, p) + '[' + checkdic(node_defn, p) + ']',",".join(filter(None, set(gene_go[gene_go['pathway'] == p]['Gene_ID'].get_values()))), ",".join(filter(None,set(gene_go[gene_go['pathway'] == p]['proteins'].get_values()))), 
 		"\n".join(set(filter(None, gene_go[gene_go['pathway'] == p]['small_mol'].get_values())))]], 
 		columns= col_pw) for p in set(filter(None, gene_go['pathway']))], ignore_index=True)
 		pw_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.csv"))
