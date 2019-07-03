@@ -123,7 +123,7 @@ def to_csv(file):
 		col_go = ["Gene_ID[location]", "Gene_Name", "Gene_definition", "GO_cellular_componenet", "GO_Molecular_function", "GO_Biological_process"]
 		go_df = pd.concat([pd.DataFrame([[g + "[" +checkdic(location, g) + "]", node_name[g], node_defn[g], "\n".join(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_cellular_componenet'].get_values())), 
 		"\n".join(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Molecular_function'].get_values())),
-		"\n".join(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Biological_process'].get_values()))]], columns= col_go) for g in set(gene_go['Gene_ID'])], ignore_index=True)
+		"\n".join(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Biological_process'].get_values()))]], columns= col_go) for g in filter(None, set(gene_go['Gene_ID']))], ignore_index=True)
 		go_df = go_df.dropna(axis=1, how='all')
 		go_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv"))
 		result.append({"displayName":"GO" ,"fileName":  userid+"-Gene_GO_annotation.csv"})
