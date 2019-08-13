@@ -161,7 +161,7 @@ def to_csv(file):
 			cols = pd.MultiIndex.from_arrays(go_column_arrays, names=('Gene', 'Description', 'Features', 'Details'))
 			go_df = pd.DataFrame(go_data_lst, columns=cols)
 			go_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv"))
-			go_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv.xlsx"), sheet_name='GO-annotation')
+			go_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.xlsx"), sheet_name='GO-annotation')
 			result.append({"displayName":"GO" ,"fileName":  userid+"-Gene_GO_annotation.csv"})
 	# Gene Pathway annotation
 	if gene_pathway != 0:
