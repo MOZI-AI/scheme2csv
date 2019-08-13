@@ -9,7 +9,7 @@ CSV_FOLDER = "/root/csv_result"
 
 def find_name(str):
 	name = re.findall('"([^"]*)"', str)
-	if len(name) > 0:
+	if len(name) > 0 and "VariableNode" not in str:
 		return re.findall('"([^"]*)"', str)[0]
 	return ""
 def checkdic(dic, str):
@@ -21,7 +21,7 @@ def find_codingGene(prot, dec):
 	for k in dec.keys():
 		if prot in dec[k].split(",") and prot != "":
 			return k
-		return ""
+	return ""
 def flatten_list(lists):
 	flattened_list = [y for x in lists for y in x]
 	return flattened_list
@@ -38,6 +38,7 @@ def to_csv(file):
 	interaction = []
 	go_annotation = 0
 	gene_pathway = 0
+	main_nodes = 0
 	biogrid = 0
 	userid = str(uuid.uuid4())
 	result = []
@@ -50,13 +51,15 @@ def to_csv(file):
 			member.append(num)
 		elif "EvaluationLink" in line:
 			evalun.append(num)
+		elif 'ConceptNode "main"' in line:
+			main_nodes = num
 		elif "gene-go-annotation" in line:
 			go_annotation = num
 		elif "gene-pathway-annotation" in line:
 			gene_pathway = num
 		elif "biogrid-interaction-annotation" in line:
 			biogrid = num
-
+	main_genes = [find_name(i) for i in lines[main_nodes:min([x for x in [go_annotation, gene_pathway,biogrid] if x!=0])] if "GeneNode" in i]
 	GO_ns = {}
 	node_name = {}
 	node_defn = {}
@@ -127,10 +130,9 @@ def to_csv(file):
 				elif 'Uniprot:' in lines[j+1] and find_name(lines[j+2]) == pathway:
 					prot.append(find_name(lines[j+1]) )
 			gene_go = gene_go.append(pd.DataFrame([[gene, "","", "", pathway, tuple(prot), tuple(sm)]], columns=col))
-	
 	# Gene GO annotation
 	if go_annotation != 0:
-		go_genes_list = set(filter(None, set(gene_go['Gene_ID'])))
+		go_genes_list = set(main_genes)
 		gene_description = [checkdic(node_name, g) for g in go_genes_list]
 		namespaces = ['GO_Molecular_function', 'GO_Biological_process', 'GO_cellular_componenet' ]
 		namespace_details = ['Name', 'ID']
@@ -138,8 +140,8 @@ def to_csv(file):
 		col_length = len(namespaces)*len(namespace_details)
 		go_column_arrays = [flatten_list([[i]*col_length for i in go_genes_list]),
 						flatten_list([[i]*col_length for i in gene_description]),
-						flatten_list([n]*len(namespace_details) for n in namespaces),
-						flatten_list([namespace_details]*len(namespaces))]
+						flatten_list([[n]*len(namespace_details) for n in namespaces]*len(go_genes_list)),
+						flatten_list([namespace_details]*len(namespaces)*len(go_genes_list))]
 		for g in go_genes_list:
 			go_data.append(find_go(set(filter(None,gene_go[gene_go['Gene_ID'] == g]['GO_Molecular_function'].get_values())), 'name'))
 			go_data.append(find_go(set(filter(None,gene_go[gene_go['Gene_ID'] == g]['GO_Molecular_function'].get_values()))))
@@ -147,20 +149,20 @@ def to_csv(file):
 			go_data.append(find_go(set(filter(None,gene_go[gene_go['Gene_ID'] == g]['GO_Biological_process'].get_values()))))
 			go_data.append(find_go(set(filter(None,gene_go[gene_go['Gene_ID'] == g]['GO_cellular_componenet'].get_values())), 'name'))
 			go_data.append(find_go(set(filter(None,gene_go[gene_go['Gene_ID'] == g]['GO_cellular_componenet'].get_values()))))
-
-		index_length = max([len(i) for i in go_data])
-		go_data = [i+['']*(index_length- len(i)) for i in go_data] 
-		go_data_lst = []
-		for d in range(index_length):
-			try:
-				go_data_lst.append([i[d] for i in go_data])
-			except IndexError:
-				continue
-		cols = pd.MultiIndex.from_arrays(go_column_arrays, names=('Gene', 'Description', 'Features', 'Details'))
-		go_df = pd.DataFrame(go_data_lst, columns=cols)
-		go_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv"))
-		go_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv.xlsx"), sheet_name='GO-annotation')
-		result.append({"displayName":"GO" ,"fileName":  userid+"-Gene_GO_annotation.csv"})
+		if go_data:
+			index_length = max([len(i) for i in go_data])
+			go_data = [i+['']*(index_length- len(i)) for i in go_data] 
+			go_data_lst = []
+			for d in range(index_length):
+				try:
+					go_data_lst.append([i[d] for i in go_data])
+				except IndexError:
+					continue
+			cols = pd.MultiIndex.from_arrays(go_column_arrays, names=('Gene', 'Description', 'Features', 'Details'))
+			go_df = pd.DataFrame(go_data_lst, columns=cols)
+			go_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv"))
+			go_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv.xlsx"), sheet_name='GO-annotation')
+			result.append({"displayName":"GO" ,"fileName":  userid+"-Gene_GO_annotation.csv"})
 	# Gene Pathway annotation
 	if gene_pathway != 0:
 		pathways_list = set(filter(None, gene_go['pathway']))
@@ -174,21 +176,21 @@ def to_csv(file):
 			pathway_data.append(list(filter(None, set(gene_go[gene_go['pathway'] == p]['Gene_ID'].get_values()))))			
 			pathway_data.append([p + "  " +str(find_codingGene(p, express_pw)) for p in list(set(gene_go[gene_go['pathway'] == p]['proteins'].get_values()[0]))])
 			pathway_data.append(list(set(gene_go[gene_go['pathway'] == p]['small_mol'].get_values()[0])))
+		if pathway_data:
+			index_length = max([len(i) for i in pathway_data])
+			pathway_data = [i+['']*(index_length- len(i)) for i in pathway_data] 
+			pathway_data_lst = []
+			for d in range(index_length):
+				try:
+					pathway_data_lst.append([i[d] for i in pathway_data])
+				except IndexError:
+					continue
 
-		index_length = max([len(i) for i in pathway_data])
-		pathway_data = [i+['']*(index_length- len(i)) for i in pathway_data] 
-		pathway_data_lst = []
-		for d in range(index_length):
-			try:
-				pathway_data_lst.append([i[d] for i in pathway_data])
-			except IndexError:
-				continue
-
-		cols = pd.MultiIndex.from_arrays(column_arrays, names=('Pathway', 'Name', 'Feature'))
-		pathway_df = pd.DataFrame(pathway_data_lst, columns=cols)
-		pathway_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.csv"))
-		pathway_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.xlsx"), sheet_name='pathway-annotation')
-		result.append({"displayName":"PATHWAY" ,"fileName": userid+"-Gene_pathway_annotations.csv"})
+			cols = pd.MultiIndex.from_arrays(column_arrays, names=('Pathway', 'Name', 'Feature'))
+			pathway_df = pd.DataFrame(pathway_data_lst, columns=cols)
+			pathway_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.csv"))
+			pathway_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.xlsx"), sheet_name='pathway-annotation')
+			result.append({"displayName":"PATHWAY" ,"fileName": userid+"-Gene_pathway_annotations.csv"})
 	# Biogrid annotation
 	if biogrid != 0:
 		gene_interactions = defaultdict(list)
@@ -213,20 +215,21 @@ def to_csv(file):
 			biogrid_data.append(gene_interactions[g])
 			biogrid_data.append([",\n".join(checkdic(pubmed,g+i).split(",")) if checkdic(pubmed,g+i) != "" else ",\n".join(checkdic(pubmed,g+i).split(","))  
 			for i in gene_interactions[g]])
-		index_length = max([len(i) for i in biogrid_data])
-		biogrid_data = [i+['']*(index_length- len(i)) for i in biogrid_data] 
-		biogrid_data_lst = []
-		for d in range(index_length):
-			try:
-				biogrid_data_lst.append([i[d] for i in biogrid_data])
-			except IndexError:
-				continue
+		if biogrid_data:
+			index_length = max([len(i) for i in biogrid_data])
+			biogrid_data = [i+['']*(index_length- len(i)) for i in biogrid_data] 
+			biogrid_data_lst = []
+			for d in range(index_length):
+				try:
+					biogrid_data_lst.append([i[d] for i in biogrid_data])
+				except IndexError:
+					continue
 
-		cols = pd.MultiIndex.from_arrays(biogrid_column_arrays, names=('Gene', 'Description', 'Feature'))
-		biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
-		biogrid_df.to_csv(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.csv"))
-		biogrid_df.to_excel(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.xlsx"), sheet_name='Biogrid-annotation')
-		result.append({"displayName":"BIOGRID" ,"fileName": userid+"-biogrid_annotation.csv"})
+			cols = pd.MultiIndex.from_arrays(biogrid_column_arrays, names=('Gene', 'Description', 'Feature'))
+			biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
+			biogrid_df.to_csv(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.csv"))
+			biogrid_df.to_excel(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.xlsx"), sheet_name='Biogrid-annotation')
+			result.append({"displayName":"BIOGRID" ,"fileName": userid+"-biogrid_annotation.csv"})
 	return result
 
 if __name__ == "__main__":
