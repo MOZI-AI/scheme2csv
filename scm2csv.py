@@ -161,7 +161,7 @@ def to_csv(file):
 			cols = pd.MultiIndex.from_arrays(go_column_arrays, names=('Gene', 'Description', 'Features', 'Details'))
 			go_df = pd.DataFrame(go_data_lst, columns=cols)
 			go_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.csv"))
-			go_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.xlsx"), sheet_name='GO-annotation')
+			# go_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.xlsx"), sheet_name='GO-annotation')
 			result.append({"displayName":"GO" ,"fileName":  userid+"-Gene_GO_annotation.csv"})
 	# Gene Pathway annotation
 	if gene_pathway != 0:
@@ -189,7 +189,7 @@ def to_csv(file):
 			cols = pd.MultiIndex.from_arrays(column_arrays, names=('Pathway', 'Name', 'Feature'))
 			pathway_df = pd.DataFrame(pathway_data_lst, columns=cols)
 			pathway_df.to_csv(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.csv"))
-			pathway_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.xlsx"), sheet_name='pathway-annotation')
+			# pathway_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.xlsx"), sheet_name='pathway-annotation')
 			result.append({"displayName":"PATHWAY" ,"fileName": userid+"-Gene_pathway_annotations.csv"})
 	# Biogrid annotation
 	if biogrid != 0:
@@ -228,7 +228,7 @@ def to_csv(file):
 			cols = pd.MultiIndex.from_arrays(biogrid_column_arrays, names=('Gene', 'Description', 'Feature'))
 			biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
 			biogrid_df.to_csv(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.csv"))
-			biogrid_df.to_excel(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.xlsx"), sheet_name='Biogrid-annotation')
+			# biogrid_df.to_excel(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.xlsx"), sheet_name='Biogrid-annotation')
 			result.append({"displayName":"BIOGRID" ,"fileName": userid+"-biogrid_annotation.csv"})
 	return result
 
