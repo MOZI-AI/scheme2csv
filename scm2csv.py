@@ -71,9 +71,9 @@ def to_csv(file):
 	for i in evalun:
 		if "GO_namespace" in lines[i+1]:
 			GO_ns.update({find_name(lines[i+3]): find_name(lines[i+4])})
-		elif "has_name" in lines[i+1]:
+		elif "has_name" in lines[i+1] or "GO_name" in lines[i+1]:
 			node_name.update({find_name(lines[i+3]): find_name(lines[i+4])})
-		elif "has_definition" in lines[i+1]:
+		elif "has_definition" in lines[i+1] or "GO_definition" in lines[i+1]:
 			node_defn.update({find_name(lines[i+3]): find_name(lines[i+4])})
 		elif "interacts_with" in lines[i+1]:
 			interaction.append(i+1)
@@ -211,7 +211,7 @@ def to_csv(file):
 				biogrid_data.append([])
 			else:
 				biogrid_data.append(checkdic(location, g))			
-			biogrid_data.append([p for p in (checkdic(expresses_bg, g).split(','))])
+			biogrid_data.append([p + "  " +str(find_codingGene(p, expresses_bg)) for p in (checkdic(expresses_bg, g).split(','))])
 			biogrid_data.append(gene_interactions[g])
 			biogrid_data.append([",\n".join(checkdic(pubmed,g+i).split(",")) if checkdic(pubmed,g+i) != "" else ",\n".join(checkdic(pubmed,g+i).split(","))  
 			for i in gene_interactions[g]])
