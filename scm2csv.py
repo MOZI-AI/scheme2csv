@@ -9,7 +9,7 @@ from config import RESULT_DIR
 
 def find_name(str):
     name = re.findall('"([^"]*)"', str)
-    if len(name) > 0 and "VariableNode" not in str:
+    if len(name) > 0 and "VariableNode" not in str and "$" not in name:
         return re.findall('"([^"]*)"', str)[0]
     return ""
 
@@ -23,7 +23,7 @@ def checkdic(dic, str):
 
 def find_codingGene(prot, dec):
     for k in dec.keys():
-        if prot in dec[k].split(",") and prot != "":
+        if prot in dec[k].split(",") and prot != "" and k != "":
             return k
     return ""
 
@@ -77,34 +77,18 @@ def to_csv(id, file):
     pubmed = {}
     location = {}
     express_pw = {}
-    expresses_bg = {}
 
     for i in evalun:
         if "GO_namespace" in lines[i + 1]:
             GO_ns.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
-        elif "has_name" in lines[i + 1] or "GO_name" in lines[i + 1]:
+        elif "has_name" in lines[i + 1] or "GO_name" in lines[i + 1] and "$" not in lines[i+4]:
             node_name.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
         elif "has_definition" in lines[i + 1] or "GO_definition" in lines[i + 1]:
             node_defn.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
         elif "interacts_with" in lines[i + 1]:
             interaction.append(i + 1)
         elif "expresses" in lines[i + 1]:
-            if biogrid != 0:
-                if i + 1 < biogrid and gene_pathway < biogrid:
-                    express_pw.update({find_name(lines[i + 3]): checkdic(express_pw,
-                                                                         find_name(lines[i + 3])) + find_name(
-                        lines[i + 4]) + ','})
-                elif i + 1 > biogrid and gene_pathway > biogrid:
-                    express_pw.update({find_name(lines[i + 3]): checkdic(express_pw,
-                                                                         find_name(lines[i + 3])) + find_name(
-                        lines[i + 4]) + ','})
-                else:
-                    expresses_bg.update({find_name(lines[i + 3]): checkdic(expresses_bg,
-                                                                           find_name(lines[i + 3])) + find_name(
-                        lines[i + 4]) + ','})
-            else:
-                express_pw.update({find_name(lines[i + 3]): checkdic(express_pw, find_name(lines[i + 3])) + find_name(
-                    lines[i + 4]) + ','})
+            express_pw.update({find_name(lines[i+3]): checkdic(express_pw, find_name(lines[i+3])) + find_name(lines[i+4]) + ','})
         elif "has_location" in lines[i + 1]:
             if find_name(lines[i + 3]) in location.keys():
                 location.update(
@@ -134,17 +118,6 @@ def to_csv(id, file):
                 gene_go = gene_go.append(
                     pd.DataFrame([[gene, "", go + " (" + node_name[go] + ")", "", "", "", ""]], columns=col))
         elif "GeneNode" in lines[i + 1] and ("R-HSA" in lines[i + 2] or 'ConceptNode "SMP' in lines[i + 2]):
-            prot = []
-            sm = []
-            pathway = find_name(lines[i + 2])
-            for j in member:
-                if 'ChEBI:' in lines[j + 1] and find_name(lines[j + 2]) == pathway:
-                    sm.append(find_name(lines[j + 1]))
-                elif 'Uniprot:' in lines[j + 1] and find_name(lines[j + 2]) == pathway:
-                    prot.append(find_name(lines[j + 1]))
-            gene_go = gene_go.append(pd.DataFrame([[gene, "", "", "", pathway, tuple(prot), tuple(sm)]], columns=col))
-        elif "Uniprot:" in lines[i + 1] and ("R-HSA" in lines[i + 2] or 'ConceptNode "SMP' in lines[i + 2]):
-            gene = find_codingGene(find_name(lines[i + 1]), express_pw)
             prot = []
             sm = []
             pathway = find_name(lines[i + 2])
@@ -205,11 +178,27 @@ def to_csv(id, file):
         column_arrays = [flatten_list([[i] * len(features) for i in pathways_list]),
                          flatten_list([[i] * len(features) for i in pathways_description]),
                          flatten_list([features] * len(pathways_list))]
-        for p in pathways_list:
-            pathway_data.append(list(filter(None, set(gene_go[gene_go['pathway'] == p]['Gene_ID'].get_values()))))
-            pathway_data.append([p + "  " + str(find_codingGene(p, express_pw)) for p in
-                                 list(set(gene_go[gene_go['pathway'] == p]['proteins'].get_values()[0]))])
-            pathway_data.append(list(set(gene_go[gene_go['pathway'] == p]['small_mol'].get_values()[0])))
+        for path in pathways_list:
+            pathway_proteins = [p for p in list(set(gene_go[gene_go['pathway'] == path]['proteins'].get_values()[0])) if p != ""]
+            pathway_genes = list(filter(None, set(gene_go[gene_go['pathway'] == path]['Gene_ID'].get_values())))
+            pathway_chebis = set(gene_go[gene_go['pathway'] == path]['small_mol'].get_values()[0])
+            gene_protein_mapping = []
+            mapped_genes = []
+            for p in pathway_proteins:	
+                gene = find_codingGene(p, express_pw)
+                if gene in pathway_genes:
+                    gene_protein_mapping.append((gene,p))
+                    mapped_genes.append(gene)
+                else:
+                     gene_protein_mapping.append(('-',p+"-->"+find_codingGene(p, express_pw)))
+            for g in pathway_genes:
+                if not g in mapped_genes:
+                    gene_protein_mapping.append((g,'-'))
+            gene_protein_mapping = sorted(list(set(gene_protein_mapping)), reverse=True)
+            pathway_genes, pathway_proteins = zip(*gene_protein_mapping)
+            pathway_data.append(list(pathway_genes))			
+            pathway_data.append(list(pathway_proteins))
+            pathway_data.append(list(pathway_chebis))
         if pathway_data:
             index_length = max([len(i) for i in pathway_data])
             pathway_data = [i + [''] * (index_length - len(i)) for i in pathway_data]
@@ -230,8 +219,8 @@ def to_csv(id, file):
         gene_interactions = defaultdict(list)
         interaction = [(find_name(lines[i + 2]), find_name(lines[i + 3])) for i in interaction]
         for key, val in interaction:
-            if not checkdic(pubmed, key + val) == "":
-                gene_interactions[key].append(val)
+            gene_interactions[key].append(val)
+            gene_interactions[val].append(key)
         gene_list = list(gene_interactions.keys())
         gene_description = [checkdic(node_name, g) for g in gene_list]
         features = ['Location', 'Proteins', 'Interacting_genes', 'PMID']
@@ -246,11 +235,11 @@ def to_csv(id, file):
             else:
                 biogrid_data.append(checkdic(location, g))
             biogrid_data.append(
-                [p + "  " + str(find_codingGene(p, expresses_bg)) for p in (checkdic(expresses_bg, g).split(','))])
-            biogrid_data.append(gene_interactions[g])
+                [p for p in (checkdic(express_pw, g).split(',')) if p != ""])
+            biogrid_data.append(list(set(gene_interactions[g])))
             biogrid_data.append([",\n".join(checkdic(pubmed, g + i).split(",")) if checkdic(pubmed,
                                                                                             g + i) != "" else ",\n".join(
-                checkdic(pubmed, g + i).split(","))
+                checkdic(pubmed, i + g).split(","))
                                  for i in gene_interactions[g]])
         if biogrid_data:
             index_length = max([len(i) for i in biogrid_data])
