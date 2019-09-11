@@ -2,7 +2,6 @@ import sys
 from collections import defaultdict
 import re
 import pandas as pd
-import uuid
 import os
 from config import RESULT_DIR
 
@@ -41,36 +40,32 @@ def find_go(lst, identifier='ID'):
         return [n[0].replace(')', '') for n in result]
 
 
-def to_csv(id, file):
+def to_csv(id):
     member = []
     evalun = []
     interaction = []
     go_annotation = 0
     gene_pathway = 0
-    main_nodes = 0
     biogrid = 0
-    userid = str(uuid.uuid4())
     result = []
+    lines = []
+    path = os.path.join(RESULT_DIR, id)
+    files = [f for f in os.listdir(path) if f[-4:] == ".scm"]
 
-    f = open(file, "r")
-    lines = open(file, "r").readlines()
+    for file in files:
+        lines = lines + open(os.path.join(path,file), "r").readlines()
 
-    for num, line in enumerate(f, 0):
+    for num, line in enumerate(lines, 0):
         if "InheritanceLink" in line or "MemberLink" in line:
             member.append(num)
         elif "EvaluationLink" in line:
             evalun.append(num)
-        elif 'ConceptNode "main"' in line:
-            main_nodes = num
         elif "gene-go-annotation" in line:
             go_annotation = num
         elif "gene-pathway-annotation" in line:
             gene_pathway = num
         elif "biogrid-interaction-annotation" in line:
             biogrid = num
-    main_genes = [find_name(i) for i in
-                  lines[main_nodes:min([x for x in [go_annotation, gene_pathway, biogrid] if x != 0])] if
-                  "GeneNode" in i]
     GO_ns = {}
     node_name = {}
     node_defn = {}
@@ -129,7 +124,7 @@ def to_csv(id, file):
             gene_go = gene_go.append(pd.DataFrame([[gene, "", "", "", pathway, tuple(prot), tuple(sm)]], columns=col))
     # Gene GO annotation
     if go_annotation != 0:
-        go_genes_list = set(main_genes)
+        go_genes_list = set(gene_go["Gene_ID"])
         gene_description = [checkdic(node_name, g) for g in go_genes_list]
         namespaces = ['GO_Molecular_function', 'GO_Biological_process', 'GO_cellular_componenet']
         namespace_details = ['Name', 'ID']
@@ -167,7 +162,6 @@ def to_csv(id, file):
             cols = pd.MultiIndex.from_arrays(go_column_arrays, names=('Gene', 'Description', 'Features', 'Details'))
             go_df = pd.DataFrame(go_data_lst, columns=cols)
             go_df.to_csv(os.path.join(RESULT_DIR, id, "gene-go.csv"))
-            # go_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_GO_annotation.xlsx"), sheet_name='GO-annotation')
             result.append({"displayName": "GO", "fileName": "gene-go.csv"})
     # Gene Pathway annotation
     if gene_pathway != 0:
@@ -212,7 +206,6 @@ def to_csv(id, file):
             cols = pd.MultiIndex.from_arrays(column_arrays, names=('Pathway', 'Name', 'Feature'))
             pathway_df = pd.DataFrame(pathway_data_lst, columns=cols)
             pathway_df.to_csv(os.path.join(RESULT_DIR, id, "gene-pathway.csv"))
-            # pathway_df.to_excel(os.path.join(CSV_FOLDER,userid+"-Gene_pathway_annotations.xlsx"), sheet_name='pathway-annotation')
             result.append({"displayName": "PATHWAY", "fileName": "gene-pathway.csv"})
     # Biogrid annotation
     if biogrid != 0:
@@ -223,7 +216,7 @@ def to_csv(id, file):
             gene_interactions[val].append(key)
         gene_list = list(gene_interactions.keys())
         gene_description = [checkdic(node_name, g) for g in gene_list]
-        features = ['Location', 'Proteins', 'Interacting_genes', 'PMID']
+        features = ['Location', 'Interacting Feature', 'PMID']
         biogrid_data = []
         col_length = 0
         biogrid_column_arrays = [flatten_list([[i] * len(features) for i in gene_list]),
@@ -234,13 +227,11 @@ def to_csv(id, file):
                 biogrid_data.append([])
             else:
                 biogrid_data.append(checkdic(location, g))
-            biogrid_data.append(
-                [p for p in (checkdic(express_pw, g).split(',')) if p != ""])
             biogrid_data.append(list(set(gene_interactions[g])))
-            biogrid_data.append([",\n".join(checkdic(pubmed, g + i).split(",")) if checkdic(pubmed,
-                                                                                            g + i) != "" else ",\n".join(
-                checkdic(pubmed, i + g).split(","))
-                                 for i in gene_interactions[g]])
+            biogrid_data.append(list(set(["\n".join(set(checkdic(pubmed, g + i).split(","))) if checkdic(pubmed,
+                                                                                            g + i) != "" else "\n".join(
+                set(checkdic(pubmed, i + g).split(",")))
+                                 for i in gene_interactions[g]])))
         if biogrid_data:
             index_length = max([len(i) for i in biogrid_data])
             biogrid_data = [i + [''] * (index_length - len(i)) for i in biogrid_data]
@@ -254,10 +245,9 @@ def to_csv(id, file):
             cols = pd.MultiIndex.from_arrays(biogrid_column_arrays, names=('Gene', 'Description', 'Feature'))
             biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
             biogrid_df.to_csv(os.path.join(RESULT_DIR, id, "biogrid.csv"))
-            # biogrid_df.to_excel(os.path.join(CSV_FOLDER,userid+"-biogrid_annotation.xlsx"), sheet_name='Biogrid-annotation')
             result.append({"displayName": "BIOGRID", "fileName": "biogrid.csv"})
     return result
 
 
 if __name__ == "__main__":
-    to_csv(sys.argv[1], sys.argv[2])
+    to_csv(sys.argv[1])
