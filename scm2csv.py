@@ -53,7 +53,7 @@ def to_csv(id):
     files = [f for f in os.listdir(path) if f[-4:] == ".scm"]
 
     for file in files:
-        lines = lines + open(os.path.join(path,file), "r").readlines()
+        lines = lines + [l for l in open(os.path.join(path,file), "r").readlines() if not l.isspace()]
 
     for num, line in enumerate(lines, 0):
         if "InheritanceLink" in line or "MemberLink" in line:
