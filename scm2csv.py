@@ -72,6 +72,8 @@ def to_csv(id):
     pubmed = {}
     location = {}
     express_pw = {}
+    selected_namespaces = []
+    selected_molecules = []
 
     for i in evalun:
         if "GO_namespace" in lines[i + 1]:
@@ -104,12 +106,18 @@ def to_csv(id):
         go = find_name(lines[i + 2])
         if "GeneNode" in lines[i + 1] and "GO:" in lines[i + 2] and GO_ns != {}:
             if GO_ns[go] == "cellular_component":
+                if not "GO_cellular_componenet" in selected_namespaces:
+                    selected_namespaces.append("GO_cellular_componenet")
                 gene_go = gene_go.append(
                     pd.DataFrame([[gene, go + " (" + node_name[go] + ")", "", "", "", "", ""]], columns=col))
             elif GO_ns[go] == "biological_process":
+                if not "GO_Biological_process" in selected_namespaces:
+                    selected_namespaces.append("GO_Biological_process")
                 gene_go = gene_go.append(
                     pd.DataFrame([[gene, "", "", go + " (" + node_name[go] + ")", "", "", ""]], columns=col))
             elif GO_ns[go] == "molecular_function":
+                if not "GO_Molecular_function" in selected_namespaces:
+                    selected_namespaces.append("GO_Molecular_function")
                 gene_go = gene_go.append(
                     pd.DataFrame([[gene, "", go + " (" + node_name[go] + ")", "", "", "", ""]], columns=col))
         elif "GeneNode" in lines[i + 1] and ("R-HSA" in lines[i + 2] or 'ConceptNode "SMP' in lines[i + 2]):
@@ -118,15 +126,17 @@ def to_csv(id):
             pathway = find_name(lines[i + 2])
             for j in member:
                 if 'ChEBI:' in lines[j + 1] and find_name(lines[j + 2]) == pathway:
+                    if "Small Molecules" not in selected_molecules: selected_molecules.append("Small Molecules")
                     sm.append(find_name(lines[j + 1]))
                 elif 'Uniprot:' in lines[j + 1] and find_name(lines[j + 2]) == pathway:
+                    if "Proteins" not in selected_molecules: selected_molecules.append("Proteins")
                     prot.append(find_name(lines[j + 1]))
             gene_go = gene_go.append(pd.DataFrame([[gene, "", "", "", pathway, tuple(prot), tuple(sm)]], columns=col))
     # Gene GO annotation
     if go_annotation != 0:
         go_genes_list = set(gene_go["Gene_ID"])
         gene_description = [checkdic(node_name, g) for g in go_genes_list]
-        namespaces = ['GO_Molecular_function', 'GO_Biological_process', 'GO_cellular_componenet']
+        namespaces = selected_namespaces
         namespace_details = ['Name', 'ID']
         go_data = []
         col_length = len(namespaces) * len(namespace_details)
@@ -135,21 +145,11 @@ def to_csv(id):
                             flatten_list([[n] * len(namespace_details) for n in namespaces] * len(go_genes_list)),
                             flatten_list([namespace_details] * len(namespaces) * len(go_genes_list))]
         for g in go_genes_list:
-            go_data.append(
-                find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Molecular_function'].get_values())),
-                        'name'))
-            go_data.append(
-                find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Molecular_function'].get_values()))))
-            go_data.append(
-                find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Biological_process'].get_values())),
-                        'name'))
-            go_data.append(
-                find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_Biological_process'].get_values()))))
-            go_data.append(
-                find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_cellular_componenet'].get_values())),
-                        'name'))
-            go_data.append(
-                find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g]['GO_cellular_componenet'].get_values()))))
+            for ns in namespaces:
+                go_data.append(
+                    find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].get_values())),'name'))
+                go_data.append(
+                    find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].get_values()))))
         if go_data:
             index_length = max([len(i) for i in go_data])
             go_data = [i + [''] * (index_length - len(i)) for i in go_data]
@@ -167,7 +167,7 @@ def to_csv(id):
     if gene_pathway != 0:
         pathways_list = set(filter(None, gene_go['pathway']))
         pathways_description = [checkdic(node_name, p) for p in pathways_list]
-        features = ['Gene', 'Protein', 'Small molecule']
+        features = ['Genes'] + sorted(selected_molecules, reverse=False)
         pathway_data = []
         column_arrays = [flatten_list([[i] * len(features) for i in pathways_list]),
                          flatten_list([[i] * len(features) for i in pathways_description]),
@@ -176,23 +176,26 @@ def to_csv(id):
             pathway_proteins = [p for p in list(set(gene_go[gene_go['pathway'] == path]['proteins'].get_values()[0])) if p != ""]
             pathway_genes = list(filter(None, set(gene_go[gene_go['pathway'] == path]['Gene_ID'].get_values())))
             pathway_chebis = set(gene_go[gene_go['pathway'] == path]['small_mol'].get_values()[0])
-            gene_protein_mapping = []
-            mapped_genes = []
-            for p in pathway_proteins:	
-                gene = find_codingGene(p, express_pw)
-                if gene in pathway_genes:
-                    gene_protein_mapping.append((gene,p))
-                    mapped_genes.append(gene)
-                else:
-                     gene_protein_mapping.append(('-',p+"-->"+find_codingGene(p, express_pw)))
-            for g in pathway_genes:
-                if not g in mapped_genes:
-                    gene_protein_mapping.append((g,'-'))
-            gene_protein_mapping = sorted(list(set(gene_protein_mapping)), reverse=True)
-            pathway_genes, pathway_proteins = zip(*gene_protein_mapping)
+
+            if "Proteins" in selected_molecules:
+                gene_protein_mapping = []
+                mapped_genes = []
+                for p in pathway_proteins:	
+                    gene = find_codingGene(p, express_pw)
+                    if gene in pathway_genes:
+                        gene_protein_mapping.append((gene,p))
+                        mapped_genes.append(gene)
+                    else:
+                        gene_protein_mapping.append(('-',p+"-->"+find_codingGene(p, express_pw)))
+                for g in pathway_genes:
+                    if not g in mapped_genes:
+                        gene_protein_mapping.append((g,'-'))
+                gene_protein_mapping = sorted(list(set(gene_protein_mapping)), reverse=True)
+                pathway_genes, pathway_proteins = zip(*gene_protein_mapping)
+
             pathway_data.append(list(pathway_genes))			
-            pathway_data.append(list(pathway_proteins))
-            pathway_data.append(list(pathway_chebis))
+            if "Proteins" in selected_molecules: pathway_data.append(list(pathway_proteins))
+            if "Small Molecules" in selected_molecules: pathway_data.append(list(pathway_chebis))
         if pathway_data:
             index_length = max([len(i) for i in pathway_data])
             pathway_data = [i + [''] * (index_length - len(i)) for i in pathway_data]
