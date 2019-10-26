@@ -1,10 +1,21 @@
 import sys
-from collections import defaultdict
+from collections import defaultdict,OrderedDict
 import re
 import pandas as pd
 import os
 from config import RESULT_DIR
+import summary_builder as summ
+import json
 
+def find_main_genes(path):
+    lines = open(os.path.join(path,"main.scm"), "r").readlines()
+    genes = []
+    for l in lines:
+        if "GeneNode" in l:
+            gene = find_name(l)
+            if not gene in genes:
+                genes.append(gene)
+    return genes
 
 def find_name(str):
     name = re.findall('"([^"]*)"', str)
@@ -51,6 +62,9 @@ def to_csv(id):
     lines = []
     path = os.path.join(RESULT_DIR, id)
     files = [f for f in os.listdir(path) if f[-4:] == ".scm"]
+    summary_main = {}
+    cross_annotation = {}
+    main_genes = find_main_genes(path)
 
     for file in files:
         lines = lines + [l for l in open(os.path.join(path,file), "r").readlines() if not l.isspace()]
@@ -72,7 +86,8 @@ def to_csv(id):
     pubmed = {}
     location = {}
     express_pw = {}
-    selected_namespaces = []
+    # to exclude empty columns
+    selected_namespaces = [] 
     selected_molecules = []
 
     for i in evalun:
@@ -146,10 +161,13 @@ def to_csv(id):
                             flatten_list([namespace_details] * len(namespaces) * len(go_genes_list))]
         for g in go_genes_list:
             for ns in namespaces:
+                go_terms = set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].get_values()))
                 go_data.append(
-                    find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].get_values())),'name'))
+                    find_go(go_terms,'name'))
                 go_data.append(
-                    find_go(set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].get_values()))))
+                    find_go(go_terms))
+                go_feat = {"gene":g, "ns":ns,"go":go_terms}
+                summary_main, cross_annotation = summ.build_summary(go_features=go_feat, main_dict=summary_main, cross_dict=cross_annotation, main_genes=main_genes)
         if go_data:
             index_length = max([len(i) for i in go_data])
             go_data = [i + [''] * (index_length - len(i)) for i in go_data]
@@ -172,6 +190,7 @@ def to_csv(id):
         column_arrays = [flatten_list([[i] * len(features) for i in pathways_list]),
                          flatten_list([[i] * len(features) for i in pathways_description]),
                          flatten_list([features] * len(pathways_list))]
+        pw_meta = {"gene":[],"protein":[],"small_molecule":[], "pathway":pathways_list}
         for path in pathways_list:
             pathway_proteins = [p for p in list(set(gene_go[gene_go['pathway'] == path]['proteins'].get_values()[0])) if p != ""]
             pathway_genes = list(filter(None, set(gene_go[gene_go['pathway'] == path]['Gene_ID'].get_values())))
@@ -193,9 +212,15 @@ def to_csv(id):
                 gene_protein_mapping = sorted(list(set(gene_protein_mapping)), reverse=True)
                 pathway_genes, pathway_proteins = zip(*gene_protein_mapping)
 
-            pathway_data.append(list(pathway_genes))			
-            if "Proteins" in selected_molecules: pathway_data.append(list(pathway_proteins))
-            if "Small Molecules" in selected_molecules: pathway_data.append(list(pathway_chebis))
+            pathway_data.append(list(pathway_genes))
+            for g in list(pathway_genes): pw_meta["gene"].append(g) 			
+            if "Proteins" in selected_molecules: 
+                pathway_data.append(list(pathway_proteins))
+                for i in list(pathway_proteins): pw_meta['protein'].append(i)
+            if "Small Molecules" in selected_molecules: 
+                pathway_data.append(list(pathway_chebis))
+                for i in list(pathway_chebis): pw_meta['small_molecule'].append(i)
+        summary_main, cross_annotation = summ.build_summary(pathways=pw_meta,main_dict=summary_main, cross_dict=cross_annotation, main_genes=main_genes)
         if pathway_data:
             index_length = max([len(i) for i in pathway_data])
             pathway_data = [i + [''] * (index_length - len(i)) for i in pathway_data]
@@ -235,6 +260,7 @@ def to_csv(id):
                                                                                             g + i) != "" else "\n".join(
                 set(checkdic(pubmed, i + g).split(",")))
                                  for i in gene_interactions[g]])))
+        summary_main, cross_annotation  = summ.build_summary(interactions=gene_interactions, main_genes=main_genes,main_dict=summary_main, cross_dict=cross_annotation)
         if biogrid_data:
             index_length = max([len(i) for i in biogrid_data])
             biogrid_data = [i + [''] * (index_length - len(i)) for i in biogrid_data]
@@ -249,6 +275,12 @@ def to_csv(id):
             biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
             biogrid_df.to_csv(os.path.join(RESULT_DIR, id, "biogrid.csv"))
             result.append({"displayName": "BIOGRID", "fileName": "biogrid.csv"})
+    with open(id+"/summary.json", "w") as s:
+        summary = OrderedDict()
+        summary["A Reference Databases"]="https://mozi.ai/datasets/current/meta.json"
+        summary["Input Genes"] = summary_main
+        summary["Cross Annotations"] = cross_annotation
+        json.dump(summary, s, indent=2)
     return result
 
 
