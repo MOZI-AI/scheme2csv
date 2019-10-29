@@ -2,6 +2,7 @@ import sys
 import re
 import os
 
+
 def build_summary(go_features=None,interactions=None,pathways=None,main_dict=None, cross_dict=None, main_genes=None):
     if go_features:
         gene = go_features["gene"]

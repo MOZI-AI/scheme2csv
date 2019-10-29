@@ -4,8 +4,9 @@ import re
 import pandas as pd
 import os
 from config import RESULT_DIR
-import summary_builder as summ
+import utils.scm2csv.summary_builder as summ
 import json
+
 
 def find_main_genes(path):
     lines = open(os.path.join(path,"main.scm"), "r").readlines()
@@ -16,6 +17,7 @@ def find_main_genes(path):
             if not gene in genes:
                 genes.append(gene)
     return genes
+
 
 def find_name(str):
     name = re.findall('"([^"]*)"', str)
