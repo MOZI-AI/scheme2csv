@@ -277,7 +277,7 @@ def to_csv(id):
             biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
             biogrid_df.to_csv(os.path.join(RESULT_DIR, id, "biogrid.csv"))
             result.append({"displayName": "BIOGRID", "fileName": "biogrid.csv"})
-    with open(id+"/summary.json", "w") as s:
+    with open(os.path.join(RESULT_DIR, id, "summary.json"), "w") as s:
         summary = OrderedDict()
         summary["A Reference Databases"]="https://mozi.ai/datasets/current/meta.json"
         summary["Input Genes"] = summary_main
