@@ -39,21 +39,19 @@ def build_summary(go_features=None,interactions=None,pathways=None,main_dict=Non
                     cross_dict[node][0]["Biogrid Interactors"]= len(set(interactions[node]))
                     cross_dict[node][0]["Biogrid Interactions"]= len(interactions[node])
     if pathways:
-        pw_features_lst = [pathways['gene'],pathways["small_molecule"], pathways["protein"]]
-        pathway = pathways["pathway"]
-        flattened_list = [y for x in pw_features_lst for y in x]      
-        for node in flattened_list:
+        pw_features_lst = [i for i in pathways.keys() if i!=""]
+        for node in pw_features_lst:
             if node in main_genes:
                 try:
-                    main_dict[node][0]["Pathways"]= len(set(pathway))
+                    main_dict[node][0]["Pathways"]= len(set(pathways[node]))
                 except KeyError:
                     main_dict[node] =[{}]
-                    main_dict[node][0]["Pathways"]= len(set(pathway))
+                    main_dict[node][0]["Pathways"]= len(set(pathways[node]))
             else:
                 try:
-                    cross_dict[node][0]["Pathways"]= len(set(pathway))
+                    cross_dict[node][0]["Pathways"]= len(set(pathways[node]))
                 except KeyError:
                     cross_dict[node] =[{}]
-                    cross_dict[node][0]["Pathways"]= len(set(pathway))
+                    cross_dict[node][0]["Pathways"]= len(set(pathways[node]))
 
     return main_dict, cross_dict

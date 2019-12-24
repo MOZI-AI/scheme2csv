@@ -9,13 +9,16 @@ import json
 
 
 def find_main_genes(path):
-    lines = open(os.path.join(path,"main.scm"), "r").readlines()
-    genes = []
-    for l in lines:
-        if "GeneNode" in l:
-            gene = find_name(l)
-            if not gene in genes:
-                genes.append(gene)
+    try:
+        lines = open(os.path.join(path,"main.scm"), "r").readlines()
+        genes = []
+        for l in lines:
+            if "GeneNode" in l:
+                gene = find_name(l)
+                if not gene in genes:
+                    genes.append(gene)
+    except FileNotFoundError:
+        genes = []
     return genes
 
 
@@ -99,7 +102,7 @@ def to_csv(id):
             node_name.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
         elif "has_definition" in lines[i + 1] or "GO_definition" in lines[i + 1]:
             node_defn.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
-        elif "interacts_with" in lines[i + 1]:
+        elif "interacts_with" in lines[i + 1] or "inferred_interaction" in lines[i + 1]:
             interaction.append(i + 1)
         elif "expresses" in lines[i + 1]:
             express_pw.update({find_name(lines[i+3]): checkdic(express_pw, find_name(lines[i+3])) + find_name(lines[i+4]) + ','})
@@ -151,7 +154,10 @@ def to_csv(id):
             gene_go = gene_go.append(pd.DataFrame([[gene, "", "", "", pathway, tuple(prot), tuple(sm)]], columns=col))
     # Gene GO annotation
     if go_annotation != 0:
-        go_genes_list = set(gene_go["Gene_ID"])
+        go_genes_list = []
+        for n in selected_namespaces:
+            go_genes_list.append(gene_go[gene_go[n] != ""]["Gene_ID"].get_values())
+        go_genes_list = set(flatten_list(go_genes_list))
         gene_description = [checkdic(node_name, g) for g in go_genes_list]
         namespaces = selected_namespaces
         namespace_details = ['Name', 'ID']
@@ -192,8 +198,8 @@ def to_csv(id):
         column_arrays = [flatten_list([[i] * len(features) for i in pathways_list]),
                          flatten_list([[i] * len(features) for i in pathways_description]),
                          flatten_list([features] * len(pathways_list))]
-        pw_meta = {"gene":[],"protein":[],"small_molecule":[], "pathway":pathways_list}
-        for path in pathways_list:
+        pw_meta = defaultdict(list)
+        for path in set(pathways_list):
             pathway_proteins = [p for p in list(set(gene_go[gene_go['pathway'] == path]['proteins'].get_values()[0])) if p != ""]
             pathway_genes = list(filter(None, set(gene_go[gene_go['pathway'] == path]['Gene_ID'].get_values())))
             pathway_chebis = set(gene_go[gene_go['pathway'] == path]['small_mol'].get_values()[0])
@@ -215,13 +221,12 @@ def to_csv(id):
                 pathway_genes, pathway_proteins = zip(*gene_protein_mapping)
 
             pathway_data.append(list(pathway_genes))
-            for g in list(pathway_genes): pw_meta["gene"].append(g) 			
             if "Proteins" in selected_molecules: 
                 pathway_data.append(list(pathway_proteins))
-                for i in list(pathway_proteins): pw_meta['protein'].append(i)
             if "Small Molecules" in selected_molecules: 
                 pathway_data.append(list(pathway_chebis))
-                for i in list(pathway_chebis): pw_meta['small_molecule'].append(i)
+            for node in flatten_list([pathway_proteins,pathway_genes,pathway_chebis]):
+                pw_meta[node].append(path) 
         summary_main, cross_annotation = summ.build_summary(pathways=pw_meta,main_dict=summary_main, cross_dict=cross_annotation, main_genes=main_genes)
         if pathway_data:
             index_length = max([len(i) for i in pathway_data])
