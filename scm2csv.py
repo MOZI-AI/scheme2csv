@@ -91,6 +91,8 @@ def to_csv(id):
     pubmed = {}
     location = {}
     express_pw = {}
+    transcribes = defaultdict(list)
+    translates = defaultdict(list)
     # to exclude empty columns
     selected_namespaces = [] 
     selected_molecules = []
@@ -104,6 +106,10 @@ def to_csv(id):
             node_defn.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
         elif "interacts_with" in lines[i + 1] or "inferred_interaction" in lines[i + 1]:
             interaction.append(i + 1)
+        elif "transcribed_to" in lines[i + 1]:
+            transcribes[find_name(lines[i+3])].append(find_name(lines[i+4]))
+        elif "translated_to" in lines[i + 1]:
+            translates[find_name(lines[i+3])].append(find_name(lines[i+4]))
         elif "expresses" in lines[i + 1]:
             express_pw.update({find_name(lines[i+3]): checkdic(express_pw, find_name(lines[i+3])) + find_name(lines[i+4]) + ','})
         elif "has_location" in lines[i + 1]:
@@ -282,6 +288,36 @@ def to_csv(id):
             biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
             biogrid_df.to_csv(os.path.join(RESULT_DIR, id, "biogrid.csv"))
             result.append({"displayName": "BIOGRID", "fileName": "biogrid.csv"})
+    # RNA's
+    if transcribes:
+        genes_list = transcribes.keys()
+        gene_description = [checkdic(node_name, g) for g in genes_list]
+        features = ["Transcribed_to", "Proteins"]
+        rna_data = []
+        column_arrays = [flatten_list([[i] * len(features) for i in genes_list]),
+                            flatten_list([[i] * len(features) for i in gene_description]),
+                            flatten_list([features] * len(genes_list))]
+        for t in genes_list:
+            transc = list(set(transcribes[t]))
+            rna_data.append(transc)
+            rna_data.append([",".join(translates[p]) for p in transc])
+        if rna_data:
+            index_length = max([len(i) for i in rna_data])
+            rna_data = [i + [''] * (index_length - len(i)) for i in rna_data]
+        rna_data_lst = []
+        for d in range(index_length):
+            try:
+                rna_data_lst.append([i[d] for i in rna_data])
+            except IndexError:
+                continue     
+        cols = pd.MultiIndex.from_arrays(column_arrays, names=('Gene', 'Name', 'Features'))
+        rna_df = pd.DataFrame(rna_data_lst, columns=cols)
+        rna_df.to_csv(os.path.join(RESULT_DIR, id, "rna.csv"))
+        result.append({"displayName": "RNA", "fileName": "rna.csv"})
+        rna = {"transcribed":transcribes,"translates":translates}
+        print(translates)
+        summary_main, cross_annotation  = summ.build_summary(rna=rna, main_genes=main_genes,main_dict=summary_main, cross_dict=cross_annotation)
+
     with open(os.path.join(RESULT_DIR, id, "summary.json"), "w") as s:
         summary = OrderedDict()
         summary["A Reference Databases"]="https://mozi.ai/datasets/current/meta.json"

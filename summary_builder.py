@@ -3,7 +3,7 @@ import re
 import os
 
 
-def build_summary(go_features=None,interactions=None,pathways=None,main_dict=None, cross_dict=None, main_genes=None):
+def build_summary(go_features=None,interactions=None,pathways=None,main_dict=None, cross_dict=None, main_genes=None, rna=None):
     if go_features:
         gene = go_features["gene"]
         go_namespace = go_features["ns"]
@@ -53,5 +53,17 @@ def build_summary(go_features=None,interactions=None,pathways=None,main_dict=Non
                 except KeyError:
                     cross_dict[node] =[{}]
                     cross_dict[node][0]["Pathways"]= len(set(pathways[node]))
+    if rna:
+        for g in rna["transcribed"].keys():
+            if g in main_genes:
+                main_dict[g][0]["Transcribed_to"] = len(set(rna["transcribed"][g]))
+            else:
+                cross_dict[g][0]["Transcribed_to"] = len(set(rna["transcribed"][g]))
+        for r in rna["translates"].keys():
+            try:
+                cross_dict[r][0]["Translated_to"] = len(set(rna["translates"][r]))
+            except KeyError:
+                cross_dict[r] =[{}]
+                cross_dict[r][0]["Translated_to"] = len(set(rna["translates"][r]))
 
     return main_dict, cross_dict
