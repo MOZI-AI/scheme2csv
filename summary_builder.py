@@ -54,16 +54,23 @@ def build_summary(go_features=None,interactions=None,pathways=None,main_dict=Non
                     cross_dict[node] =[{}]
                     cross_dict[node][0]["Pathways"]= len(set(pathways[node]))
     if rna:
-        for g in rna["transcribed"].keys():
+        for g in rna["transcribes"].keys():
             if g in main_genes:
-                main_dict[g][0]["Transcribed_to"] = len(set(rna["transcribed"][g]))
+                try:
+                    main_dict[g][0]["Transcribed_to"] = len(set(rna["transcribes"][g]))
+                except KeyError:
+                    main_dict[g] =[{}]
+                    main_dict[g][0]["Transcribed_to"] = len(set(rna["transcribes"][g]))
             else:
-                cross_dict[g][0]["Transcribed_to"] = len(set(rna["transcribed"][g]))
+                try:
+                    cross_dict[g][0]["Transcribed_to"] = len(set(rna["transcribes"][g]))
+                except KeyError:
+                    cross_dict[g] = [{}]
+                    cross_dict[g][0]["Transcribed_to"] = len(set(rna["transcribes"][g])) 
         for r in rna["translates"].keys():
             try:
                 cross_dict[r][0]["Translated_to"] = len(set(rna["translates"][r]))
             except KeyError:
-                cross_dict[r] =[{}]
+                cross_dict[r] = [{}]
                 cross_dict[r][0]["Translated_to"] = len(set(rna["translates"][r]))
-
     return main_dict, cross_dict

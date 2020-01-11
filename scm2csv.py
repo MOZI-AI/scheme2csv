@@ -314,9 +314,7 @@ def to_csv(id):
         rna_df = pd.DataFrame(rna_data_lst, columns=cols)
         rna_df.to_csv(os.path.join(RESULT_DIR, id, "rna.csv"))
         result.append({"displayName": "RNA", "fileName": "rna.csv"})
-        rna = {"transcribed":transcribes,"translates":translates}
-        print(translates)
-        summary_main, cross_annotation  = summ.build_summary(rna=rna, main_genes=main_genes,main_dict=summary_main, cross_dict=cross_annotation)
+        summary_main, cross_annotation  = summ.build_summary(rna={"transcribes":transcribes,"translates":translates}, main_genes=main_genes,main_dict=summary_main, cross_dict=cross_annotation)
 
     with open(os.path.join(RESULT_DIR, id, "summary.json"), "w") as s:
         summary = OrderedDict()
