@@ -300,7 +300,7 @@ def to_csv(id):
         for t in genes_list:
             transc = list(set(transcribes[t]))
             rna_data.append(transc)
-            rna_data.append([",".join(translates[p]) for p in transc])
+            rna_data.append([",".join(set(translates[p])) for p in transc])
         if rna_data:
             index_length = max([len(i) for i in rna_data])
             rna_data = [i + [''] * (index_length - len(i)) for i in rna_data]
