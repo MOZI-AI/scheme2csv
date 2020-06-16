@@ -118,7 +118,7 @@ def to_csv(id):
                     {find_name(lines[i + 3]): location[find_name(lines[i + 3])] + [find_name(lines[i + 4])]})
             location.update({find_name(lines[i + 3]): [find_name(lines[i + 4])]})
         elif "has_pubmed" in lines[i + 1]:
-            pubmedline = i + 11
+            pubmedline = i + 1
             while "pubmed" in lines[pubmedline]:
                 pubmed.update({find_name(lines[i + 6]) + find_name(lines[i + 7]): checkdic(pubmed, find_name(
                     lines[i + 6]) + find_name(lines[i + 7])) + find_name(lines[pubmedline]) + ','})
