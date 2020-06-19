@@ -80,11 +80,11 @@ def to_csv(id):
         elif "EvaluationLink" in line:
             evalun.append(num)
         elif "gene-go-annotation" in line:
-            go_annotation = num
+            go_annotation = num + 1
         elif "gene-pathway-annotation" in line:
-            gene_pathway = num
+            gene_pathway = num + 1
         elif "biogrid-interaction-annotation" in line:
-            biogrid = num
+            biogrid = num + 1
     GO_ns = {}
     node_name = {}
     node_defn = {}
