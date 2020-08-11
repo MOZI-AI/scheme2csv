@@ -162,7 +162,7 @@ def to_csv(id):
     if go_annotation != 0:
         go_genes_list = []
         for n in selected_namespaces:
-            go_genes_list.append(gene_go[gene_go[n] != ""]["Gene_ID"].get_values())
+            go_genes_list.append(gene_go[gene_go[n] != ""]["Gene_ID"].values)
         go_genes_list = set(flatten_list(go_genes_list))
         gene_description = [checkdic(node_name, g) for g in go_genes_list]
         namespaces = selected_namespaces
@@ -175,7 +175,7 @@ def to_csv(id):
                             flatten_list([namespace_details] * len(namespaces) * len(go_genes_list))]
         for g in go_genes_list:
             for ns in namespaces:
-                go_terms = set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].get_values()))
+                go_terms = set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].values))
                 go_data.append(
                     find_go(go_terms,'name'))
                 go_data.append(
@@ -206,9 +206,9 @@ def to_csv(id):
                          flatten_list([features] * len(pathways_list))]
         pw_meta = defaultdict(list)
         for path in set(pathways_list):
-            pathway_proteins = [p for p in list(set(gene_go[gene_go['pathway'] == path]['proteins'].get_values()[0])) if p != ""]
-            pathway_genes = list(filter(None, set(gene_go[gene_go['pathway'] == path]['Gene_ID'].get_values())))
-            pathway_chebis = set(gene_go[gene_go['pathway'] == path]['small_mol'].get_values()[0])
+            pathway_proteins = [p for p in list(set(gene_go[gene_go['pathway'] == path]['proteins'].values[0])) if p != ""]
+            pathway_genes = list(filter(None, set(gene_go[gene_go['pathway'] == path]['Gene_ID'].values)))
+            pathway_chebis = set(gene_go[gene_go['pathway'] == path]['small_mol'].values[0])
 
             if "Proteins" in selected_molecules:
                 gene_protein_mapping = []
