@@ -50,7 +50,7 @@ def flatten_list(lists):
 
 def find_go(lst, identifier='ID'):
     result = [i.split(" (") for i in lst]
-    if identifier is 'name':
+    if identifier == 'name':
         return [n[1].replace(')', '') for n in result]
     else:
         return [n[0].replace(')', '') for n in result]
