@@ -1,329 +1,194 @@
-import sys
-from collections import defaultdict,OrderedDict
-import re
-import pandas as pd
 import os
+import sys
+import pandas as pd
+import opencog.bioscience
+from opencog.atomspace import AtomSpace, types
+from opencog.scheme import scheme_eval
 from config import RESULT_DIR
-import utils.scm2csv.summary_builder as summ
+import time
 import json
 
+def find_txt_name(node, atomspace):
+    # Finds the text name of the bio-entity
+    name = \
+    '''
+    (let ([name (cog-outgoing-set (cog-execute! (GetLink
+        (Evaluation (PredicateNode "has_name") (ListLink {} (Variable "$name"))))))])
+        (if (null? name) "" (cog-name (car name))))
+    '''.format(node)
+    name = scheme_eval(atomspace, name).decode("utf-8")
+    return name if len(name) > 1 else None
 
-def find_main_genes(path):
-    try:
-        lines = open(os.path.join(path,"main.scm"), "r").readlines()
-        genes = []
-        for l in lines:
-            if "GeneNode" in l:
-                gene = find_name(l)
-                if not gene in genes:
-                    genes.append(gene)
-    except FileNotFoundError:
-        genes = []
-    return genes
-
-
-def find_name(str):
-    name = re.findall('"([^"]*)"', str)
-    if len(name) > 0 and "VariableNode" not in str and "$" not in name:
-        return re.findall('"([^"]*)"', str)[0]
-    return ""
-
-
-def checkdic(dic, str):
-    try:
-        return dic[str]
-    except KeyError:
-        return ""
-
-
-def find_codingGene(prot, dec):
-    for k in dec.keys():
-        if prot in dec[k].split(",") and prot != "" and k != "":
-            return k
-    return ""
-
-
-def flatten_list(lists):
-    flattened_list = [y for x in lists for y in x]
-    return flattened_list
-
-
-def find_go(lst, identifier='ID'):
-    result = [i.split(" (") for i in lst]
-    if identifier == 'name':
-        return [n[1].replace(')', '') for n in result]
+def find_inherits_or_members(node, atomspace, linktype="Inheritance"):
+    # Returns concepts where the given bio-entity inherits or is a member from
+    # and their count by type
+    if linktype == "Inheritance":
+        atoms = atomspace.get_atoms_by_type(types.InheritanceLink)
     else:
-        return [n[0].replace(')', '') for n in result]
-
-
-def to_csv(id):
-    member = []
-    evalun = []
-    interaction = []
-    go_annotation = 0
-    gene_pathway = 0
-    biogrid = 0
-    result = []
-    lines = []
-    path = os.path.join(RESULT_DIR, id)
-    files = [f for f in os.listdir(path) if f[-4:] == ".scm"]
-    summary_main = {}
-    cross_annotation = {}
-    main_genes = find_main_genes(path)
-
-    for file in files:
-        lines = lines + [l for l in open(os.path.join(path,file), "r").readlines() if not l.isspace()]
-
-    for num, line in enumerate(lines, 0):
-        if "InheritanceLink" in line or "MemberLink" in line:
-            member.append(num)
-        elif "EvaluationLink" in line:
-            evalun.append(num)
-        elif "gene-go-annotation" in line:
-            go_annotation = num + 1
-        elif "gene-pathway-annotation" in line:
-            gene_pathway = num + 1
-        elif "biogrid-interaction-annotation" in line:
-            biogrid = num + 1
-    GO_ns = {}
-    node_name = {}
-    node_defn = {}
-    pubmed = {}
-    location = {}
-    express_pw = {}
-    transcribes = defaultdict(list)
-    translates = defaultdict(list)
-    # to exclude empty columns
-    selected_namespaces = [] 
-    selected_molecules = []
-
-    for i in evalun:
-        if "GO_namespace" in lines[i + 1]:
-            GO_ns.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
-        elif "has_name" in lines[i + 1] or "GO_name" in lines[i + 1] and "$" not in lines[i+4]:
-            node_name.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
-        elif "has_definition" in lines[i + 1] or "GO_definition" in lines[i + 1]:
-            node_defn.update({find_name(lines[i + 3]): find_name(lines[i + 4])})
-        elif "interacts_with" in lines[i + 1] or "inferred_interaction" in lines[i + 1]:
-            interaction.append(i + 1)
-        elif "transcribed_to" in lines[i + 1]:
-            transcribes[find_name(lines[i+3])].append(find_name(lines[i+4]))
-        elif "translated_to" in lines[i + 1]:
-            translates[find_name(lines[i+3])].append(find_name(lines[i+4]))
-        elif "expresses" in lines[i + 1]:
-            express_pw.update({find_name(lines[i+3]): checkdic(express_pw, find_name(lines[i+3])) + find_name(lines[i+4]) + ','})
-        elif "has_location" in lines[i + 1]:
-            if find_name(lines[i + 3]) in location.keys():
-                location.update(
-                    {find_name(lines[i + 3]): location[find_name(lines[i + 3])] + [find_name(lines[i + 4])]})
-            location.update({find_name(lines[i + 3]): [find_name(lines[i + 4])]})
-        elif "has_pubmed" in lines[i + 1]:
-            pubmedline = i + 1
-            while "pubmed" in lines[pubmedline]:
-                pubmed.update({find_name(lines[i + 6]) + find_name(lines[i + 7]): checkdic(pubmed, find_name(
-                    lines[i + 6]) + find_name(lines[i + 7])) + find_name(lines[pubmedline]) + ','})
-                pubmedline += 1
-
-    col = ["Gene_ID", "GO_cellular_componenet", "GO_Molecular_function", "GO_Biological_process", "pathway", "proteins",
-           "small_mol"]
-    gene_go = pd.DataFrame([], columns=col)
-    for i in member:
-        gene = find_name(lines[i + 1])
-        go = find_name(lines[i + 2])
-        if "GeneNode" in lines[i + 1] and "GO:" in lines[i + 2] and GO_ns != {}:
-            if GO_ns[go] == "cellular_component":
-                if not "GO_cellular_componenet" in selected_namespaces:
-                    selected_namespaces.append("GO_cellular_componenet")
-                gene_go = gene_go.append(
-                    pd.DataFrame([[gene, go + " (" + node_name[go] + ")", "", "", "", "", ""]], columns=col))
-            elif GO_ns[go] == "biological_process":
-                if not "GO_Biological_process" in selected_namespaces:
-                    selected_namespaces.append("GO_Biological_process")
-                gene_go = gene_go.append(
-                    pd.DataFrame([[gene, "", "", go + " (" + node_name[go] + ")", "", "", ""]], columns=col))
-            elif GO_ns[go] == "molecular_function":
-                if not "GO_Molecular_function" in selected_namespaces:
-                    selected_namespaces.append("GO_Molecular_function")
-                gene_go = gene_go.append(
-                    pd.DataFrame([[gene, "", go + " (" + node_name[go] + ")", "", "", "", ""]], columns=col))
-        elif "GeneNode" in lines[i + 1] and ("R-HSA" in lines[i + 2] or 'ConceptNode "SMP' in lines[i + 2]):
-            prot = []
-            sm = []
-            pathway = find_name(lines[i + 2])
-            for j in member:
-                if 'ChEBI:' in lines[j + 1] and find_name(lines[j + 2]) == pathway:
-                    if "Small Molecules" not in selected_molecules: selected_molecules.append("Small Molecules")
-                    sm.append(find_name(lines[j + 1]))
-                elif 'Uniprot:' in lines[j + 1] and find_name(lines[j + 2]) == pathway:
-                    if "Proteins" not in selected_molecules: selected_molecules.append("Proteins")
-                    prot.append(find_name(lines[j + 1]))
-            gene_go = gene_go.append(pd.DataFrame([[gene, "", "", "", pathway, tuple(prot), tuple(sm)]], columns=col))
-    # Gene GO annotation
-    if go_annotation != 0:
-        go_genes_list = []
-        for n in selected_namespaces:
-            go_genes_list.append(gene_go[gene_go[n] != ""]["Gene_ID"].values)
-        go_genes_list = set(flatten_list(go_genes_list))
-        gene_description = [checkdic(node_name, g) for g in go_genes_list]
-        namespaces = selected_namespaces
-        namespace_details = ['Name', 'ID']
-        go_data = []
-        col_length = len(namespaces) * len(namespace_details)
-        go_column_arrays = [flatten_list([[i] * col_length for i in go_genes_list]),
-                            flatten_list([[i] * col_length for i in gene_description]),
-                            flatten_list([[n] * len(namespace_details) for n in namespaces] * len(go_genes_list)),
-                            flatten_list([namespace_details] * len(namespaces) * len(go_genes_list))]
-        for g in go_genes_list:
-            for ns in namespaces:
-                go_terms = set(filter(None, gene_go[gene_go['Gene_ID'] == g][ns].values))
-                go_data.append(
-                    find_go(go_terms,'name'))
-                go_data.append(
-                    find_go(go_terms))
-                go_feat = {"gene":g, "ns":ns,"go":go_terms}
-                summary_main, cross_annotation = summ.build_summary(go_features=go_feat, main_dict=summary_main, cross_dict=cross_annotation, main_genes=main_genes)
-        if go_data:
-            index_length = max([len(i) for i in go_data])
-            go_data = [i + [''] * (index_length - len(i)) for i in go_data]
-            go_data_lst = []
-            for d in range(index_length):
-                try:
-                    go_data_lst.append([i[d] for i in go_data])
-                except IndexError:
-                    continue
-            cols = pd.MultiIndex.from_arrays(go_column_arrays, names=('Gene', 'Description', 'Features', 'Details'))
-            go_df = pd.DataFrame(go_data_lst, columns=cols)
-            go_df.to_csv(os.path.join(RESULT_DIR, id, "gene-go.csv"))
-            result.append({"displayName": "GO", "fileName": "gene-go.csv"})
-    # Gene Pathway annotation
-    if gene_pathway != 0:
-        pathways_list = set(filter(None, gene_go['pathway']))
-        pathways_description = [checkdic(node_name, p) for p in pathways_list]
-        features = ['Genes'] + sorted(selected_molecules, reverse=False)
-        pathway_data = []
-        column_arrays = [flatten_list([[i] * len(features) for i in pathways_list]),
-                         flatten_list([[i] * len(features) for i in pathways_description]),
-                         flatten_list([features] * len(pathways_list))]
-        pw_meta = defaultdict(list)
-        for path in set(pathways_list):
-            pathway_proteins = [p for p in list(set(gene_go[gene_go['pathway'] == path]['proteins'].values[0])) if p != ""]
-            pathway_genes = list(filter(None, set(gene_go[gene_go['pathway'] == path]['Gene_ID'].values)))
-            pathway_chebis = set(gene_go[gene_go['pathway'] == path]['small_mol'].values[0])
-
-            if "Proteins" in selected_molecules:
-                gene_protein_mapping = []
-                mapped_genes = []
-                for p in pathway_proteins:	
-                    gene = find_codingGene(p, express_pw)
-                    if gene in pathway_genes:
-                        gene_protein_mapping.append((gene,p))
-                        mapped_genes.append(gene)
-                    else:
-                        gene_protein_mapping.append(('-',p+"-->"+find_codingGene(p, express_pw)))
-                for g in pathway_genes:
-                    if not g in mapped_genes:
-                        gene_protein_mapping.append((g,'-'))
-                gene_protein_mapping = sorted(list(set(gene_protein_mapping)), reverse=True)
-                pathway_genes, pathway_proteins = zip(*gene_protein_mapping)
-
-            pathway_data.append(list(pathway_genes))
-            if "Proteins" in selected_molecules: 
-                pathway_data.append(list(pathway_proteins))
-            if "Small Molecules" in selected_molecules: 
-                pathway_data.append(list(pathway_chebis))
-            for node in flatten_list([pathway_proteins,pathway_genes,pathway_chebis]):
-                pw_meta[node].append(path) 
-        summary_main, cross_annotation = summ.build_summary(pathways=pw_meta,main_dict=summary_main, cross_dict=cross_annotation, main_genes=main_genes)
-        if pathway_data:
-            index_length = max([len(i) for i in pathway_data])
-            pathway_data = [i + [''] * (index_length - len(i)) for i in pathway_data]
-            pathway_data_lst = []
-            for d in range(index_length):
-                try:
-                    pathway_data_lst.append([i[d] for i in pathway_data])
-                except IndexError:
-                    continue
-
-            cols = pd.MultiIndex.from_arrays(column_arrays, names=('Pathway', 'Name', 'Feature'))
-            pathway_df = pd.DataFrame(pathway_data_lst, columns=cols)
-            pathway_df.to_csv(os.path.join(RESULT_DIR, id, "gene-pathway.csv"))
-            result.append({"displayName": "PATHWAY", "fileName": "gene-pathway.csv"})
-    # Biogrid annotation
-    if biogrid != 0:
-        gene_interactions = defaultdict(list)
-        interaction = [(find_name(lines[i + 2]), find_name(lines[i + 3])) for i in interaction]
-        for key, val in interaction:
-            gene_interactions[key].append(val)
-            gene_interactions[val].append(key)
-        gene_list = list(gene_interactions.keys())
-        gene_description = [checkdic(node_name, g) for g in gene_list]
-        features = ['Location', 'Interacting Feature', 'PMID']
-        biogrid_data = []
-        col_length = 0
-        biogrid_column_arrays = [flatten_list([[i] * len(features) for i in gene_list]),
-                                 flatten_list([[i] * len(features) for i in gene_description]),
-                                 flatten_list([features] * len(gene_list))]
-        for g in gene_list:
-            if checkdic(location, g) == "":
-                biogrid_data.append([])
+        atoms = atomspace.get_atoms_by_type(types.MemberLink)
+    _from = []
+    has_ = []
+    count_by_type = {}
+    for i in atoms:
+        element1 = i.out[0]
+        element2 = i.out[1]
+        if element1 == node:
+            txt_name = find_txt_name(element2, atomspace)
+            node_name = element2.name
+            _from.append("{} ({})".format(node_name, txt_name))
+            # Count member_from by type for summary
+            elm2_type = element2.type_name
+            if elm2_type in count_by_type.keys():
+                count_by_type[elm2_type] = count_by_type[elm2_type] + 1
             else:
-                biogrid_data.append(checkdic(location, g))
-            biogrid_data.append(list(set(gene_interactions[g])))
-            biogrid_data.append(list(set(["\n".join(set(checkdic(pubmed, g + i).split(","))) if checkdic(pubmed,
-                                                                                            g + i) != "" else "\n".join(
-                set(checkdic(pubmed, i + g).split(",")))
-                                 for i in gene_interactions[g]])))
-        summary_main, cross_annotation  = summ.build_summary(interactions=gene_interactions, main_genes=main_genes,main_dict=summary_main, cross_dict=cross_annotation)
-        if biogrid_data:
-            index_length = max([len(i) for i in biogrid_data])
-            biogrid_data = [i + [''] * (index_length - len(i)) for i in biogrid_data]
-            biogrid_data_lst = []
-            for d in range(index_length):
-                try:
-                    biogrid_data_lst.append([i[d] for i in biogrid_data])
-                except IndexError:
-                    continue
+                count_by_type[elm2_type] = 1
+        elif element2 == node:
+            txt_name = find_txt_name(element1, atomspace)
+            node_name = element1.name
+            has_.append("{} ({})".format(node_name, txt_name))
+    _from = "\n".join(_from) if _from else None
+    has_ = "\n".join(has_) if has_ else None
+    return _from, has_, count_by_type
 
-            cols = pd.MultiIndex.from_arrays(biogrid_column_arrays, names=('Gene', 'Description', 'Feature'))
-            biogrid_df = pd.DataFrame(biogrid_data_lst, columns=cols)
-            biogrid_df.to_csv(os.path.join(RESULT_DIR, id, "biogrid.csv"))
-            result.append({"displayName": "BIOGRID", "fileName": "biogrid.csv"})
-    # RNA's
-    if transcribes:
-        genes_list = transcribes.keys()
-        gene_description = [checkdic(node_name, g) for g in genes_list]
-        features = ["Transcribed_to", "Proteins"]
-        rna_data = []
-        column_arrays = [flatten_list([[i] * len(features) for i in genes_list]),
-                            flatten_list([[i] * len(features) for i in gene_description]),
-                            flatten_list([features] * len(genes_list))]
-        for t in genes_list:
-            transc = list(set(transcribes[t]))
-            rna_data.append(transc)
-            rna_data.append([",".join(set(translates[p])) for p in transc])
-        if rna_data:
-            index_length = max([len(i) for i in rna_data])
-            rna_data = [i + [''] * (index_length - len(i)) for i in rna_data]
-        rna_data_lst = []
-        for d in range(index_length):
-            try:
-                rna_data_lst.append([i[d] for i in rna_data])
-            except IndexError:
-                continue     
-        cols = pd.MultiIndex.from_arrays(column_arrays, names=('Gene', 'Name', 'Features'))
-        rna_df = pd.DataFrame(rna_data_lst, columns=cols)
-        rna_df.to_csv(os.path.join(RESULT_DIR, id, "rna.csv"))
-        result.append({"displayName": "RNA", "fileName": "rna.csv"})
-        summary_main, cross_annotation  = summ.build_summary(rna={"transcribes":transcribes,"translates":translates}, main_genes=main_genes,main_dict=summary_main, cross_dict=cross_annotation)
 
-    with open(os.path.join(RESULT_DIR, id, "summary.json"), "w") as s:
-        summary = OrderedDict()
-        summary["A Reference Databases"]="https://mozi.ai/datasets/current/meta.json"
-        summary["Input Genes"] = summary_main
-        summary["Cross Annotations"] = cross_annotation
-        json.dump(summary, s, indent=2)
-    return result
+def find_interactions(node, atomspace):
+    # Finds and returns interactions of the given bio-entity with others, the type of interaction
+    # and their count
+    interaction_result = \
+    '''
+    (let ([interactions (list "expresses" "interacts_with" "binding" "reaction" "inhibition" "activation" "expression" "catalysis" "ptmod" 
+           "GO_regulates" "GO_positively_regulates" "GO_negatively_regulates" "has_part" "has_role" "translated_to" "transcribed_to" )]
+          [node {}])
+        (string-join (map (lambda (i)
+          (let ([result   
+            (cog-outgoing-set (cog-execute! (GetLink (ChoiceLink 
+            (Evaluation (PredicateNode i) (ListLink node (Variable "$n")))
+            (Evaluation (PredicateNode i) (ListLink (Variable "$n") node))
+            (Evaluation (PredicateNode i) (SetLink node (Variable "$n")))))))])
+          (if (null? result) ""
+          (string-join (list i (string-join (map (lambda (x) (cog-name x))result) ",")) ":")))
+        )interactions) " "))
+    '''.format(node)
+    interaction_result = scheme_eval(atomspace, interaction_result).decode("utf-8")
+    interaction_result = "\n".join(interaction_result.split())
+    count = {}
+    if interaction_result:
+        for i in interaction_result.split("\n"):
+            interaction = i.split(":")
+            count[interaction[0]] = len(interaction[1].split(","))
+    return interaction_result, count
 
+def find_locations(node, atomspace):
+    # Finds cellular location of the given bio-entity
+    locations = \
+    '''
+    (let ([loc (cog-outgoing-set (cog-execute! (GetLink
+        (Evaluation (PredicateNode "has_location") (ListLink {} (Variable "$loc"))))))])
+        (if (null? loc) "" (string-join (map (lambda (l) (cog-name l)) loc) ",")))
+    '''.format(node)
+    locations = scheme_eval(atomspace,locations).decode("utf-8")
+    return locations if locations else None
+
+def filter_df(df):
+    # Drop empty columns from the dataframe
+    empty_cols = [col for col in df.columns if df[col].isnull().all()]
+    df.drop(empty_cols, axis=1, inplace=True)
+    # Fill null values with NA
+    filtered_df = df.fillna("N/A")
+    filtered_df = filtered_df.drop_duplicates()
+    return filtered_df
+
+def generate_url(node, node_type):
+    # Generate the source URL for the bio-entity
+    if "Uniprot" in node_type:
+        return "https://www.uniprot.org/uniprot/{}".format(node)
+    elif "Gene" in node_type:
+        return "https://www.ncbi.nlm.nih.gov/gene/?term={}".format(node)
+    elif node_type == "Reactome":
+        return "http://www.reactome.org/content/detail/{}".format(node)
+    elif node_type in ["CellularComponent", "BiologicalProcess","MolecularFunction"]:
+        return "http://amigo.geneontology.org/amigo/term/{}".format(node)
+    elif node_type == "Chebi":
+        return "https://www.ebi.ac.uk/chebi/searchId.do?chebiId={}".format(node)
+    elif node_type == "Smp":
+        return "http://smpdb.ca/view/{}".format(node)
+    else:
+        return node_type.replace("Node"," database")
+
+def to_csv(file_dir, main_nodes=False):
+    start = time.time()
+    if main_nodes:
+        main_nodes = [i["geneName"] for i in main_nodes]
+    path = os.path.join(RESULT_DIR, file_dir)
+    input_file = os.path.join(path, "result.scm")
+    atomspace = AtomSpace()
+    modules = "(use-modules (opencog) (opencog bioscience) (opencog persist-file) (opencog exec))"
+    scheme_eval(atomspace, modules)
+    scheme_eval(atomspace, "(load-file \"{}\")".format(input_file))
+    df_columns = ["Bio-entity","Type","Name","Source db","Member_of","Has_members","Inherits_from","Has_inherits","Interaction/type","Cell Location"]
+    df1 = pd.DataFrame([], columns=df_columns)
+    df2 = pd.DataFrame([], columns=df_columns)
+
+    summary = dict()
+    cross_an = dict()
+    main_input = dict()
+
+    # Find all Biological entities
+    bio_types = scheme_eval(atomspace, "(cog-get-types)").decode("utf-8")
+    bio_types = bio_types.replace("(","").replace(")","").split(" ")
+    bio_types = [i for i in bio_types if "Node" in i]
+    molecules = ["Uniprot", "Gene", "Chebi", "Pubchem","Drubank","Refseq","Enst"]
+    atoms = []
+    atoms_count = [{}] 
+    for t in bio_types:
+        try:
+            atom = atomspace.get_atoms_by_type(getattr(types, t))
+            if len(atom) > 0 and not t in ["Node","PredicateNode","ConceptNode"]:
+                atoms_count[0].update({t.replace("Node",""):len(atom)})
+                atoms = atoms + atom
+        except:
+            continue
+
+    for i,val in enumerate(atoms):
+        txt_name = find_txt_name(val, atomspace)
+        if txt_name:
+           node = val.name
+           node_type = val.type_name.replace("Node","")
+           source = generate_url(node, node_type)
+           count = {}
+           member_of, has_members, count_mem = find_inherits_or_members(val, atomspace,linktype="member")
+           count.update(count_mem)
+           inherits_from, has_inherits, count_inh  = find_inherits_or_members(val, atomspace)
+           count.update(count_inh)
+           location = find_locations(val, atomspace)
+           if node_type in molecules:
+               interacts_with, count_int = find_interactions(val, atomspace)
+               count.update(count_int)
+               if main_nodes and node in main_nodes:
+                  main_input[node] = [count]
+               else:  
+                  cross_an[node] = [count] 
+               df1.loc[len(df1)] = [node, node_type, txt_name, source, member_of,has_members, inherits_from,has_inherits,interacts_with,location]
+           else:
+               interacts_with = None 
+               df2.loc[len(df2)] = [node, node_type, txt_name, source, member_of,has_members, inherits_from,has_inherits,interacts_with,location]
+    
+    summary["A Reference Databases"] = "mozi.ai/datasets/"
+    summary["Cross Annotations"] = cross_an
+    summary["Input Genes"] = main_input
+    summary["Total count"] = {"Count": atoms_count}
+    with open(os.path.join(path, "summary.json"), "w") as j:
+        json.dump(summary, j)
+    
+    df1 = filter_df(df1)
+    if len(df1) > 0:
+        df1.to_csv(os.path.join(path, "result1.csv"), index=False)
+    df2 = filter_df(df2)
+    if len(df2) > 0:
+        df2.to_csv(os.path.join(path, "result2.csv"), index=False)
+    end = time.time()
+    
+    return "Time to parse atomese to csv and generate summary: {}".format(end-start)
 
 if __name__ == "__main__":
-    to_csv(sys.argv[1])
+    print(to_csv(sys.argv[1]))
